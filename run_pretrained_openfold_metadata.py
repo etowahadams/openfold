@@ -134,6 +134,33 @@ def round_up_seqlen(seqlen):
     return int(math.ceil(seqlen / TRACING_INTERVAL)) * TRACING_INTERVAL
 
 
+def get_representative_chain_ids(tags, fasta_path, metadata_cache):
+    """
+    This function maps the tags in the fasta file to the representative chain ids
+
+    Args:
+    tags: list of tags in the fasta file
+    fasta_path: path to the fasta file
+    metadata_cache: metadata cache that maps chain ids to pdb chain ids
+
+    Returns:
+    representative_chain_ids: list of representative chain ids corresponding to the tags in the fasta file
+    """
+    # Check if the pdb corresponding to the fasta file is found in the metadata cache
+    pdb_id = os.path.splitext(fasta_path)[0]
+    if pdb_id not in metadata_cache:
+        raise KeyError(f"PDB ID {pdb_id} not found in metadata cache")
+    # Check if the chains in the fasta file are found in the metadata cache
+    pdb_metadata = metadata_cache[pdb_id]
+    pdb_chains = set(pdb_metadata['chains'].keys())
+    is_subset = all([tag in pdb_chains for tag in tags])
+    if not is_subset:
+        raise KeyError(f"Chains from {fasta_path} not found in metadata cache")
+    # At this point we know that all chains in the fasta file are in the metadata cache
+    representative_chain_ids = [pdb_metadata['chains'][tag]['alignment_representative_id'] for tag in tags]
+    
+    return representative_chain_ids
+
 def generate_feature_dict(
     tags,
     seqs,
@@ -210,6 +237,12 @@ def main(args):
             raise ValueError(
                 "Tracing requires that fixed_size mode be enabled in the config"
             )
+    
+    # This is the metadata cache the maps chain ids to pdb chain ids
+    metadata_cache = {}
+    with open(args.metadata_cache_path, 'r') as f:
+        all_cashe = json.load(f)
+        metadata_cache = all_cashe['structure_data']
 
     is_multimer = "multimer" in args.config_preset
 
@@ -266,6 +299,13 @@ def main(args):
             data = fp.read()
 
         tags, seqs = parse_fasta(data)
+
+        try:
+            # Use the metadata cashe to get the representative chain ids
+            tags = get_representative_chain_ids(tags, fasta_path, metadata_cache)
+        except KeyError as e:
+            logger.error(e)
+            continue
 
         if not is_multimer and len(tags) != 1:
             print(
@@ -484,6 +524,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use_deepspeed_evoformer_attention", action="store_true", default=False, 
         help="Whether to use the DeepSpeed evoformer attention layer. Must have deepspeed installed in the environment.",
+    )
+    parser.add_argument(
+        "--metadata_cache_path", type=str, default=None,
+        help="""Path to the metadata cache file, which contains information about about each structure in the dataset""",
     )
     add_data_args(parser)
     args = parser.parse_args()
