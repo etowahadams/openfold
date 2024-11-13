@@ -241,8 +241,8 @@ def main(args):
     # This is the metadata cache the maps chain ids to pdb chain ids
     metadata_cache = {}
     with open(args.metadata_cache_path, 'r') as f:
-        all_cashe = json.load(f)
-        metadata_cache = all_cashe['structure_data']
+        all_cache = json.load(f)
+        metadata_cache = all_cache['structure_data']
 
     is_multimer = "multimer" in args.config_preset
 
@@ -301,7 +301,7 @@ def main(args):
         tags, seqs = parse_fasta(data)
 
         try:
-            # Use the metadata cashe to get the representative chain ids
+            # Use the metadata cache to get the representative chain ids
             tags = get_representative_chain_ids(tags, fasta_path, metadata_cache)
         except KeyError as e:
             logger.error(e)
